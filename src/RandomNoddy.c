@@ -80,10 +80,11 @@ int RandomNoddy(char *output , int DataBase) {
 
 	report_Random_status(output, DataBase);
 
+	// Comments Geophysics for generation of only the geometry block
 	//doGeophysics(BLOCK_AND_ANOM, viewOptions, geophOptions, output, output,
 	//		NULL, 0, NULL, NULL, NULL);
-	doGeophysics(BLOCK_ONLY, viewOptions, geophOptions, output, output,
-			NULL, 0, NULL, NULL, NULL); //vitaliy
+	// doGeophysics(BLOCK_ONLY, viewOptions, geophOptions, output, output,
+	// 		NULL, 0, NULL, NULL, NULL); //vitaliy
 
 }
 
@@ -92,7 +93,7 @@ int readRandomHist() {
 	gettimeofday(&start, NULL);
 
 	srand(start.tv_usec);   //vitaliy // Initialization, should only be called once.
-	int ellipses2 = 1+(rand()%3);  //vitaliy    // Returns a pseudo-random integer between 0 and RAND_MAX.
+	int ellipses2 = 1+(rand()%5);  //vitaliy    // Returns a pseudo-random integer between 0 and RAND_MAX excluded. Here RAND_MAX = 5.
 	//int numEvents = 5; // number of random events, including base STRATIGRAPHY and first TILT
 	int numEvents = 2+ellipses2; //vitaliy // number of random events, including base STRATIGRAPHY and first TILT
 
@@ -162,10 +163,10 @@ static int loadRandomHistory(numEvents)
 			if (event == 0)
 				type2 = STRATIGRAPHY;
 			else if (event == 1)
-				type2 = TILT;
+				type2 = FAULT; //amandine
 			else {
 				//type = (int) (xrshr128p_next(&state) % 10) + 1;
-				type=9; //vitaliy
+				type=3; //amandine
 				if (type == 1 || type == 2)
 					type2 = FOLD;
 				else if (type == 3 || type == 4)
@@ -1214,10 +1215,10 @@ int loadRandomUnconformity(options)
 int loadRandomStratigraphy(options)
 	STRATIGRAPHY_OPTIONS *options; {
 	int i;
-	int maxLayers = 5; // maximum number of layers (minimum is 2)
+	int maxLayers = 10; // maximum number of layers (minimum is 5)
 
-	//options->numLayers = (xrshr128p_next(&state) % 5) + 2;
-	options->numLayers = 1; //vitaliy
+	options->numLayers = (xrshr128p_next(&state) % 5) + 5;
+	// options->numLayers = 5; //vitaliy//amandine
 	if (options->properties)
 		xvt_mem_free((char* ) options->properties);
 	if (!(options->properties = (LAYER_PROPERTIES*) xvt_mem_zalloc(
