@@ -18,7 +18,7 @@
 #define DEBUG(X)    
 #define DEBUG1(X)   
 
-static int loadRandomHistory(int);
+static int loadRandomHistory(int, int *, int);
 
 /* ********************************** */
 /* External Globals used in this file */
@@ -83,8 +83,8 @@ int RandomNoddy(char *output , int DataBase) {
 	// Comments Geophysics for generation of only the geometry block
 	//doGeophysics(BLOCK_AND_ANOM, viewOptions, geophOptions, output, output,
 	//		NULL, 0, NULL, NULL, NULL);
-	// doGeophysics(BLOCK_ONLY, viewOptions, geophOptions, output, output,
-	// 		NULL, 0, NULL, NULL, NULL); //vitaliy
+	doGeophysics(BLOCK_ONLY, viewOptions, geophOptions, output, output,
+			NULL, 0, NULL, NULL, NULL); //vitaliy
 
 }
 
@@ -93,11 +93,29 @@ int readRandomHist() {
 	gettimeofday(&start, NULL);
 
 	srand(start.tv_usec);   //vitaliy // Initialization, should only be called once.
-	int ellipses2 = 1+(rand()%5);  //vitaliy    // Returns a pseudo-random integer between 0 and RAND_MAX excluded. Here RAND_MAX = 5.
-	//int numEvents = 5; // number of random events, including base STRATIGRAPHY and first TILT
-	int numEvents = 2+ellipses2; //vitaliy // number of random events, including base STRATIGRAPHY and first TILT
+	// int ellipses2 = 1+(rand()%5);  //vitaliy    // Returns a pseudo-random integer between 0 and RAND_MAX excluded. Here RAND_MAX = 5.
 
-	loadRandomHistory(numEvents);
+	int numEvents = 1; //amandine // stratigraphy
+
+	int fracEvents = 1;
+	// int fracEvents = 1+(rand()%3); //amandine // Select a specific number of fracturation events. Between 1 and 3
+	int faultEvents[fracEvents]; // amandine // Number of fault by fracturation events
+	int numFaults = 5;
+	numFaults = 2+(rand()%numFaults); // Choose a random number of faults for each fracturation events (decreasing by event)
+	faultEvents[0] = numFaults;
+	numEvents += numFaults;
+
+
+	for (unsigned i = 1; i<fracEvents; i++){
+		numFaults = (rand()%numFaults); // Choose a random number of faults for each fracturation events (decreasing by event)
+		faultEvents[i] = numFaults;
+		numEvents += numFaults;
+	}
+
+	// int numEvents += ellipses2; //vitaliy // number of random events, including base STRATIGRAPHY and first TILT
+
+
+	loadRandomHistory(numEvents, faultEvents, fracEvents);
 
 	loadRandomBlockOpts();
 	loadRandomGeoOpts();
@@ -132,8 +150,8 @@ ReportRandomIcons(FILE *out) {
 
 }
 
-static int loadRandomHistory(numEvents)
-	int numEvents; {
+static int loadRandomHistory(numEvents, faultEvents, fracEvents)
+	int numEvents; int *faultEvents; int fracEvents;{
 	static char *eventTypes[] = { "STRATIGRAPHY", "FOLD", "FAULT",
 			"UNCONFORMITY", "SHEAR_ZONE", "DYKE", "PLUG", "STRAIN", "TILT",
 			"FOLIATION", "LINEATION", "IMPORT", "STOP", "GENERIC", "" };
@@ -157,16 +175,28 @@ static int loadRandomHistory(numEvents)
 	wip = (WINDOW_INFO*) &batchWindowInfo;
 	historyWindow = win; /* store as a global */
 
+	// For fault modelling
+	int num_fault_waiting;
+	double orient_frac[fracEvents][2]; // To define the dip direction and dip of each fracturation events
+	for (int fe; fe < fracEvents; fe++)
+	{
+		num_fault_waiting += faultEvents[fe];
+
+		orient_frac[fe][0] = 360.0 * xrshr128p_next_double(&state); //dip direction
+		orient_frac[fe][1] = 60.0 + 20.0*(xrshr128p_next_double(&state)); //dip
+	}
+	int current_frac_events = 0;
+
 	numEventsInFile = numEvents;
 	{
-		for (event = 0; event < numEventsInFile; event++) {
+		for (unsigned event = 0; event < numEventsInFile; event++) {
+
 			if (event == 0)
 				type2 = STRATIGRAPHY;
-			else if (event == 1)
-				type2 = FAULT; //amandine
-			else {
-				//type = (int) (xrshr128p_next(&state) % 10) + 1;
-				type=3; //amandine
+
+			else if (num_fault_waiting < numEvents - event)
+			{
+				type = (int) (xrshr128p_next(&state) % 10) + 1;
 				if (type == 1 || type == 2)
 					type2 = FOLD;
 				else if (type == 3 || type == 4)
@@ -181,6 +211,9 @@ static int loadRandomHistory(numEvents)
 					type2 = PLUG;
 				else
 					type2 = TILT;
+			}
+			else{
+				type2 = FAULT; // Adding last faults
 			}
 
 			//printf("%d %d %d\n",query,numEvents,event, type);
@@ -231,6 +264,7 @@ static int loadRandomHistory(numEvents)
 				break;
 			}
 			case FAULT: {
+				// Adding Fault events according to fracturation family
 				FAULT_OPTIONS *options;
 
 				options = (FAULT_OPTIONS*) xvt_mem_zalloc(
@@ -242,7 +276,19 @@ static int loadRandomHistory(numEvents)
 				}
 				p->options = (char*) options;
 				setDefaultOptions(p);
-				loadRandomFault(options);
+
+				double conjuguate = rand()%2;
+				double dipdirection = (orient_frac[current_frac_events][0] + 180.0*conjuguate);
+				if (dipdirection>= 360.0)
+					dipdirection -= 360.0;
+				double dip = orient_frac[current_frac_events][1];
+
+				loadRandomFault(options, dipdirection, dip);
+				
+				num_fault_waiting -= 1;
+				faultEvents[current_frac_events] -= 1;
+				if (faultEvents[current_frac_events] <= 0 && current_frac_events < fracEvents)
+					current_frac_events += 1;
 				break;
 			}
 			case UNCONFORMITY: {
@@ -891,10 +937,11 @@ int loadRandomDyke(options)
 	return (TRUE);
 }
 
-int loadRandomFault(options)
-	FAULT_OPTIONS *options; {
+int loadRandomFault(options, dipdir, dip)
+	FAULT_OPTIONS *options; double dipdir; double dip;
+{
 	int i;
-	double pitch, dip;
+	double pitch;
 	char temp[100], strVal[100];
 
 	// printf("FAAAAULLTSSS\n");
@@ -905,12 +952,12 @@ int loadRandomFault(options)
 
 	options->movement = BOTH;
 
-	options->positionX = 2000.0 + 2000.0 * xrshr128p_next_double(&state);
-	options->positionY = 2000.0 + 2000.0 * xrshr128p_next_double(&state);
+	options->positionX = 0.0 + 5000.0 * xrshr128p_next_double(&state);
+	options->positionY = 0.0 + 5000.0 * xrshr128p_next_double(&state);
 	options->positionZ = 2000.0 + 2000.0 * xrshr128p_next_double(&state);
 
-	options->dipDirection = 360.0 * xrshr128p_next_double(&state);
-	options->dip = 90.0 * sqrt(xrshr128p_next_double(&state));
+	options->dipDirection = dipdir;
+	options->dip = dip;
 	options->pitch = 90.0 * xrshr128p_next_double(&state);
 
 	options->slip = 2000.0 * xrshr128p_next_double(&state);
@@ -1215,9 +1262,9 @@ int loadRandomUnconformity(options)
 int loadRandomStratigraphy(options)
 	STRATIGRAPHY_OPTIONS *options; {
 	int i;
-	int maxLayers = 10; // maximum number of layers (minimum is 5)
+	int maxLayers = 20; // maximum number of layers (minimum is 5)
 
-	options->numLayers = (xrshr128p_next(&state) % 5) + 5;
+	options->numLayers = (xrshr128p_next(&state) % 6) + 15;
 	// options->numLayers = 5; //vitaliy//amandine
 	if (options->properties)
 		xvt_mem_free((char* ) options->properties);
@@ -1310,8 +1357,8 @@ int loadRandomProperties(layer, options)
 		}
 		else //Sed
 		{
-			//lithocode=(xrshr128p_next(&state) % rocktypes[4])+rocktypes[0]+rocktypes[1]+rocktypes[2]+rocktypes[3];
-			lithocode=30; //limestone //vitaliy
+			lithocode=(xrshr128p_next(&state) % rocktypes[4])+rocktypes[0]+rocktypes[1]+rocktypes[2]+rocktypes[3];
+			// lithocode=30; //limestone //vitaliy
 			petrophysics( lithocode, &density, &magsus );
 
 		}
