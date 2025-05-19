@@ -12,7 +12,7 @@
 //#include <libpq-fe.h>
 #include "petrophysics.h"
 #include "petrophy_defs.h"
-
+#include "kent_distrib.h"
 
 
 #define DEBUG(X)    
@@ -51,6 +51,7 @@ char time_stamp[100]; //microsecond timestamp
 extern int rocktypes[5]; //lithology classes for petrophysics
 
 int RandomNoddy(char *output , int DataBase) {
+
  //	const char *conninfo;
  //	PGconn *conn;
 	struct timeval start;
@@ -101,12 +102,8 @@ int readRandomHist() {
 	// int fracEvents = 1+(rand()%3); //amandine // Select a specific number of fracturation events. Between 1 and 3
 	int faultEvents[fracEvents]; // amandine // Number of fault by fracturation events
 	int numFaults = 5;
-	numFaults = 2+(rand()%numFaults); // Choose a random number of faults for each fracturation events (decreasing by event)
-	faultEvents[0] = numFaults;
-	numEvents += numFaults;
 
-
-	for (unsigned i = 1; i<fracEvents; i++){
+	for (unsigned i = 0; i<fracEvents; i++){
 		numFaults = (rand()%numFaults); // Choose a random number of faults for each fracturation events (decreasing by event)
 		faultEvents[i] = numFaults;
 		numEvents += numFaults;
@@ -278,10 +275,17 @@ static int loadRandomHistory(numEvents, faultEvents, fracEvents)
 				setDefaultOptions(p);
 
 				double conjuguate = rand()%2;
-				double dipdirection = (orient_frac[current_frac_events][0] + 180.0*conjuguate);
+
+				double dip = orient_frac[current_frac_events][1];
+				double dipdirection = orient_frac[current_frac_events][0];
+
+				sample_dip_dipdir(dip, dipdirection, 5, 20, &dip, &dipdirection);
+
+				// printf(" Dip: %.5f, Dipdirection %.5f \n", dip, dipdirection);
+
+				dipdirection = (dipdirection + 180.0*conjuguate);
 				if (dipdirection>= 360.0)
 					dipdirection -= 360.0;
-				double dip = orient_frac[current_frac_events][1];
 
 				loadRandomFault(options, dipdirection, dip);
 				
