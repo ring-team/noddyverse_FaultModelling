@@ -33,6 +33,7 @@ extern FILE_SPEC topoFileSpec;
 extern double minTopoValue, maxTopoValue;
 
 extern int batchExecution;
+// extern void do3dStratMap (THREED_IMAGE_DATA *threedData, char *filename);
 extern COLOR backgroundColor;
 extern WINDOW_INFO batchWindowInfo;
 void copyUndoAdditions(OBJECT*, int);
@@ -86,6 +87,17 @@ int RandomNoddy(char *output , int DataBase) {
 	//		NULL, 0, NULL, NULL, NULL);
 	doGeophysics(BLOCK_ONLY, viewOptions, geophOptions, output, output,
 			NULL, 0, NULL, NULL, NULL); //vitaliy
+
+	// Surface output
+	// Vulcan_output(output);
+
+	threedViewOptions.fillType = 5;
+
+	// do3dStratMap(&threedData, filename);
+
+	do3dStratMap ((THREED_IMAGE_DATA *) NULL, output);
+
+	threedViewOptions.fillType = 3;
 
 }
 
@@ -2172,4 +2184,21 @@ int reportRandomProperties(stream, options)
 	return (TRUE);
 }
 
+// void Vulcan_output(filename)
+// char *filename;
+// {
+// 	// THREED_IMAGE_DATA threedData;
 
+// 	// init3dDrawing(&threedData);
+
+// 	// setup3dDrawing(&threedData);
+
+// 	threedViewOptions.fillType = 5;
+
+// 	// do3dStratMap(&threedData, filename);
+
+// 	do3dStratMap ((THREED_IMAGE_DATA *) NULL, filename);
+
+// 	threedViewOptions.fillType = 3;
+
+// }
