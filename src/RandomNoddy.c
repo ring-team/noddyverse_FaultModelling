@@ -33,7 +33,6 @@ extern FILE_SPEC topoFileSpec;
 extern double minTopoValue, maxTopoValue;
 
 extern int batchExecution;
-// extern void do3dStratMap (THREED_IMAGE_DATA *threedData, char *filename);
 extern COLOR backgroundColor;
 extern WINDOW_INFO batchWindowInfo;
 void copyUndoAdditions(OBJECT*, int);
@@ -94,8 +93,10 @@ int RandomNoddy(char *output , int DataBase) {
 	threedViewOptions.fillType = 5;
 
 	// do3dStratMap(&threedData, filename);
-
-	do3dStratMap ((THREED_IMAGE_DATA *) NULL, output);
+	// char dxfname[250];
+	// sprintf((char *) dxfname,"%s.vul",output);
+	addFileExtention(output, ".vul");
+	do3dStratMap((THREED_IMAGE_DATA *) NULL, output);
 
 	threedViewOptions.fillType = 3;
 
@@ -110,13 +111,13 @@ int readRandomHist() {
 
 	int numEvents = 1; //amandine // stratigraphy
 
-	int fracEvents = 1;
-	// int fracEvents = 1+(rand()%3); //amandine // Select a specific number of fracturation events. Between 1 and 3
+	// int fracEvents = 1;
+	int fracEvents = 1+(rand()%3); //amandine // Select a specific number of fracturation events. Between 1 and 3
 	int faultEvents[fracEvents]; // amandine // Number of fault by fracturation events
 	int numFaults = 5;
 
 	for (unsigned i = 0; i<fracEvents; i++){
-		numFaults = (rand()%numFaults); // Choose a random number of faults for each fracturation events (decreasing by event)
+		numFaults = 1 + (rand()%numFaults); // Choose a random number of faults for each fracturation events (decreasing by event)
 		faultEvents[i] = numFaults;
 		numEvents += numFaults;
 	}
@@ -187,13 +188,14 @@ static int loadRandomHistory(numEvents, faultEvents, fracEvents)
 	// For fault modelling
 	int num_fault_waiting;
 	double orient_frac[fracEvents][2]; // To define the dip direction and dip of each fracturation events
-	for (int fe; fe < fracEvents; fe++)
+	for (int fe = 0; fe < fracEvents; fe++)
 	{
 		num_fault_waiting += faultEvents[fe];
 
 		orient_frac[fe][0] = 360.0 * xrshr128p_next_double(&state); //dip direction
 		orient_frac[fe][1] = 60.0 + 20.0*(xrshr128p_next_double(&state)); //dip
 	}
+
 	int current_frac_events = 0;
 
 	numEventsInFile = numEvents;
@@ -203,7 +205,7 @@ static int loadRandomHistory(numEvents, faultEvents, fracEvents)
 			if (event == 0)
 				type2 = STRATIGRAPHY;
 
-			else if (num_fault_waiting < numEvents - event)
+			else if ( num_fault_waiting < (numEvents - event))
 			{
 				type = (int) (xrshr128p_next(&state) % 10) + 1;
 				if (type == 1 || type == 2)
