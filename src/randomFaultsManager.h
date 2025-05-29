@@ -1,3 +1,5 @@
+#include <stddef.h>
+
 #ifndef RANDOM_FAULT
 #define RANDOM_FAULT
 

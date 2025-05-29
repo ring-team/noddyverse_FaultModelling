@@ -12,13 +12,13 @@
 //#include <libpq-fe.h>
 #include "petrophysics.h"
 #include "petrophy_defs.h"
-#include "kent_distrib.h"
+#include "randomFaultsManager.h"
 
 
 #define DEBUG(X)    
 #define DEBUG1(X)   
 
-static int loadRandomHistory(int, int *, int);
+static int loadRandomHistory(int);
 
 /* ********************************** */
 /* External Globals used in this file */
@@ -31,6 +31,10 @@ extern THREED_VIEW_OPTIONS threedViewOptions;
 extern double iscale; /* scaling factor for geology */
 extern FILE_SPEC topoFileSpec;
 extern double minTopoValue, maxTopoValue;
+// extern void initRandomFaultManager(FaultManager *fltsManager, xrshr128p_state_t state); Version in copy, not compiling for the moment
+extern void freeRandomFaultManager(FaultManager *fltsManager);
+extern void randomFault(RandomFault *fault);
+extern void initRandomFaultManager(FaultManager *fltsManager);
 
 extern int batchExecution;
 extern COLOR backgroundColor;
@@ -111,21 +115,10 @@ int readRandomHist() {
 
 	int numEvents = 1; //amandine // stratigraphy
 
-	// int fracEvents = 1;
-	int fracEvents = 1+(rand()%3); //amandine // Select a specific number of fracturation events. Between 1 and 3
-	int faultEvents[fracEvents]; // amandine // Number of fault by fracturation events
-	int numFaults = 5;
-
-	for (unsigned i = 0; i<fracEvents; i++){
-		numFaults = 1 + (rand()%numFaults); // Choose a random number of faults for each fracturation events (decreasing by event)
-		faultEvents[i] = numFaults;
-		numEvents += numFaults;
-	}
-
-	// int numEvents += ellipses2; //vitaliy // number of random events, including base STRATIGRAPHY and first TILT
+	// numEvents += ellipses2; //vitaliy // add number of random events
 
 
-	loadRandomHistory(numEvents, faultEvents, fracEvents);
+	loadRandomHistory(numEvents);
 
 	loadRandomBlockOpts();
 	loadRandomGeoOpts();
@@ -160,8 +153,8 @@ ReportRandomIcons(FILE *out) {
 
 }
 
-static int loadRandomHistory(numEvents, faultEvents, fracEvents)
-	int numEvents; int *faultEvents; int fracEvents;{
+static int loadRandomHistory(numEvents)
+	int numEvents;{
 	static char *eventTypes[] = { "STRATIGRAPHY", "FOLD", "FAULT",
 			"UNCONFORMITY", "SHEAR_ZONE", "DYKE", "PLUG", "STRAIN", "TILT",
 			"FOLIATION", "LINEATION", "IMPORT", "STOP", "GENERIC", "" };
@@ -186,27 +179,29 @@ static int loadRandomHistory(numEvents, faultEvents, fracEvents)
 	historyWindow = win; /* store as a global */
 
 	// For fault modelling
-	int num_fault_waiting;
-	double orient_frac[fracEvents][2]; // To define the dip direction and dip of each fracturation events
-	for (int fe = 0; fe < fracEvents; fe++)
-	{
-		num_fault_waiting += faultEvents[fe];
+	FaultManager fltMng;
 
-		orient_frac[fe][0] = 360.0 * xrshr128p_next_double(&state); //dip direction
-		orient_frac[fe][1] = 60.0 + 20.0*(xrshr128p_next_double(&state)); //dip
-	}
+	initRandomFaultManager(&fltMng);
 
-	int current_frac_events = 0;
+	int num_fault_waiting = fltMng.total_fault;
+
+	int current_family = 0;
+	int current_fault = 0;
+	numEvents += num_fault_waiting;
 
 	numEventsInFile = numEvents;
+	int rngfault = 0;
 	{
 		for (unsigned event = 0; event < numEventsInFile; event++) {
+
+			rngfault = 0;
 
 			if (event == 0)
 				type2 = STRATIGRAPHY;
 
 			else if ( num_fault_waiting < (numEvents - event))
 			{
+				rngfault = 1;
 				type = (int) (xrshr128p_next(&state) % 10) + 1;
 				if (type == 1 || type == 2)
 					type2 = FOLD;
@@ -288,25 +283,24 @@ static int loadRandomHistory(numEvents, faultEvents, fracEvents)
 				p->options = (char*) options;
 				setDefaultOptions(p);
 
-				double conjuguate = rand()%2;
+				RandomFault fault;
+				if (rngfault == 1){
+					randomFault(&fault);
+				}
+				else {
 
-				double dip = orient_frac[current_frac_events][1];
-				double dipdirection = orient_frac[current_frac_events][0];
+					fault = fltMng.families[current_family].faults[current_fault];
 
-				sample_dip_dipdir(dip, dipdirection, 5, 20, &dip, &dipdirection);
+					num_fault_waiting -= 1;
+					current_fault += 1;
+					if (fltMng.families[current_family].faults_number <= current_fault && current_family < (int)fltMng.family_number)
+					{
+						current_family += 1;
+						current_fault = 0;
+					}
+				}
 
-				// printf(" Dip: %.5f, Dipdirection %.5f \n", dip, dipdirection);
-
-				dipdirection = (dipdirection + 180.0*conjuguate);
-				if (dipdirection>= 360.0)
-					dipdirection -= 360.0;
-
-				loadRandomFault(options, dipdirection, dip);
-				
-				num_fault_waiting -= 1;
-				faultEvents[current_frac_events] -= 1;
-				if (faultEvents[current_frac_events] <= 0 && current_frac_events < fracEvents)
-					current_frac_events += 1;
+				loadRandomFault(options, fault);
 				break;
 			}
 			case UNCONFORMITY: {
@@ -521,6 +515,8 @@ static int loadRandomHistory(numEvents, faultEvents, fracEvents)
 
 		// printf("loadrandhist total object = %d\n",query,count);
 	}
+
+	freeRandomFaultManager(&fltMng);
 
 	return (TRUE);
 }
@@ -955,37 +951,38 @@ int loadRandomDyke(options)
 	return (TRUE);
 }
 
-int loadRandomFault(options, dipdir, dip)
-	FAULT_OPTIONS *options; double dipdir; double dip;
+int loadRandomFault(options, fault)
+	FAULT_OPTIONS *options; RandomFault fault;
 {
 	int i;
 	double pitch;
+	double dip;
 	char temp[100], strVal[100];
 
 	// printf("FAAAAULLTSSS\n");
 
 	options->type = FAULT_EVENT;
 
-	options->geometry = TRANSLATION;
+	options->geometry = ELLIPTICAL;
 
 	options->movement = BOTH;
 
-	options->positionX = 0.0 + 5000.0 * xrshr128p_next_double(&state);
-	options->positionY = 0.0 + 5000.0 * xrshr128p_next_double(&state);
-	options->positionZ = 2000.0 + 2000.0 * xrshr128p_next_double(&state);
+	options->positionX = fault.posX;
+	options->positionY = fault.posY;
+	options->positionZ = fault.posZ;
 
-	options->dipDirection = dipdir;
-	options->dip = dip;
-	options->pitch = 90.0 * xrshr128p_next_double(&state);
+	options->dipDirection = fault.dipdir;
+	options->dip = fault.dip;
+	options->pitch = fault.pitch;
 
-	options->slip = 2000.0 * xrshr128p_next_double(&state);
+	options->slip = fault.slip;
 	options->rotation = 0.0;
 
 	options->amplitude = 100.0;
 	options->radius = 100.0;
-	options->xAxis = 0.0;
-	options->yAxis = 0.0;
-	options->zAxis = 0.0;
+	options->xAxis = fault.Xaxis;
+	options->yAxis = fault.Yaxis;
+	options->zAxis = fault.Zaxis;
 	options->cylindricalIndex = 0.0;
 	options->profilePitch = 0.0;
 

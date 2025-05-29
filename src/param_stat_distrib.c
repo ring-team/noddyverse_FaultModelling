@@ -5,9 +5,9 @@
 
 // ------------------ Geometric Utility ------------------
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
+// #ifndef M_PI
+// #define M_PI 3.14159265358979323846
+// #endif
 
 // 3D vector representation
 typedef struct {
@@ -32,7 +32,7 @@ Vector3D random_unit_vector() {
 
     Vector3D rng_vector;
 
-    double theta = 2 * M_PI * ((double)rand() / RAND_MAX);
+    double theta = 2 * M_PI * ((double) rand() / RAND_MAX);
     double u = 2.0 * ((double)rand() / RAND_MAX) - 1.0;
     double s = sqrt(1 - u * u);
     rng_vector.x = s * cos(theta);
@@ -133,6 +133,15 @@ Vector3D sample_kent(double kappa, double beta) {
     } while (u > f);
 
     return rng_vector;
+}
+
+
+// Sampling normal distribution
+double sample_centred_normal() {
+    double u1 = ((double) rand() + 1.0) / ((double) RAND_MAX + 2.0);
+    double u2 = ((double) rand() + 1.0) / ((double) RAND_MAX + 2.0);
+
+    return sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI *u2);
 }
 
 
